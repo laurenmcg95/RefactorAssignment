@@ -953,8 +953,8 @@ public class DateUtils {
      * @param modType  type to truncate, round or ceiling
      * @throws ArithmeticException if the year is over 280 million
      */
-    private static void modify(final Calendar val, final int field, final int modType) {
-        if (val.get(Calendar.YEAR) > 280000000) {
+    private static void modify(final Calendar calendar, final int field, final int modType) {
+        if (calendar.get(Calendar.YEAR) > 280000000) {
             throw new ArithmeticException("Calendar value too large for accurate calculations");
         }
         
@@ -970,9 +970,9 @@ public class DateUtils {
 
         
         // ----------------- Fix for LANG-59 ----------------------- END ----------------
-
-        long time = truncateTime(val, field, modType);
+        truncateTime(calendar, field, modType);
         
+      
         
         boolean roundUp = false;
         for (final int[] aField : fields) {
@@ -984,28 +984,28 @@ public class DateUtils {
                             //This is a special case that's hard to generalize
                             //If the date is 1, we round up to 16, otherwise
                             //  we subtract 15 days and add 1 month
-                            if (val.get(Calendar.DATE) == 1) {
-                                val.add(Calendar.DATE, 15);
+                            if (calendar.get(Calendar.DATE) == 1) {
+                            	calendar.add(Calendar.DATE, 15);
                             } else {
-                                val.add(Calendar.DATE, -15);
-                                val.add(Calendar.MONTH, 1);
+                            	calendar.add(Calendar.DATE, -15);
+                            	calendar.add(Calendar.MONTH, 1);
                             }
 // ----------------- Fix for LANG-440 ---------------------- START ---------------
                         } else if (field == Calendar.AM_PM) {
                             // This is a special case
                             // If the time is 0, we round up to 12, otherwise
                             //  we subtract 12 hours and add 1 day
-                            if (val.get(Calendar.HOUR_OF_DAY) == 0) {
-                                val.add(Calendar.HOUR_OF_DAY, 12);
+                            if (calendar.get(Calendar.HOUR_OF_DAY) == 0) {
+                            	calendar.add(Calendar.HOUR_OF_DAY, 12);
                             } else {
-                                val.add(Calendar.HOUR_OF_DAY, -12);
-                                val.add(Calendar.DATE, 1);
+                            	calendar.add(Calendar.HOUR_OF_DAY, -12);
+                            	calendar.add(Calendar.DATE, 1);
                             }
 // ----------------- Fix for LANG-440 ---------------------- END ---------------
                         } else {
                             //We need at add one to this field since the
                             //  last number causes us to round up
-                            val.add(aField[0], 1);
+                        	calendar.add(aField[0], 1);
                         }
                     }
                     return;
@@ -1021,7 +1021,7 @@ public class DateUtils {
                         //If we're going to drop the DATE field's value,
                         //  we want to do this our own way.
                         //We need to subtrace 1 since the date has a minimum of 1
-                        offset = val.get(Calendar.DATE) - 1;
+                        offset = calendar.get(Calendar.DATE) - 1;
                         //If we're above 15 days adjustment, that means we're in the
                         //  bottom half of the month and should stay accordingly.
                         if (offset >= 15) {
@@ -1036,7 +1036,7 @@ public class DateUtils {
                     if (aField[0] == Calendar.HOUR_OF_DAY) {
                         //If we're going to drop the HOUR field's value,
                         //  we want to do this our own way.
-                        offset = val.get(Calendar.HOUR_OF_DAY);
+                        offset = calendar.get(Calendar.HOUR_OF_DAY);
                         if (offset >= 12) {
                             offset -= 12;
                         }
@@ -1046,83 +1046,86 @@ public class DateUtils {
                     break;
             }
             if (!offsetSet) {
-                final int min = val.getActualMinimum(aField[0]);
-                final int max = val.getActualMaximum(aField[0]);
+                final int min = calendar.getActualMinimum(aField[0]);
+                final int max = calendar.getActualMaximum(aField[0]);
                 //Calculate the offset from the minimum allowed value
-                offset = val.get(aField[0]) - min;
+                offset = calendar.get(aField[0]) - min;
                 //Set roundUp if this is more than half way between the minimum and maximum
                 roundUp = offset > ((max - min) / 2);
             }
             //We need to remove this field
             if (offset != 0) {
-                val.set(aField[0], val.get(aField[0]) - offset);
+            	calendar.set(aField[0], calendar.get(aField[0]) - offset);
             }
         }
         throw new IllegalArgumentException("The field " + field + " is not supported");
 
     }
 
-    private static long truncateTime(final Calendar val, final int field, final int modType) {
+    private static void truncateTime(final Calendar val, final int field, final int modType) {
     	final Date date = val.getTime();
         long time = date.getTime();
-        boolean done = false;
 
-        time = truncateMilliseconds(val, field, modType, time);
+        time = truncateMilliseconds(val, modType, time);
 
-        if (field == Calendar.SECOND) {
-            done = true;
+        if (!compareFields(field, Calendar.SECOND)) {
+        	time = truncateSeconds(val, modType, time);
+        }
+               
+        if (!compareFields(field, Calendar.MINUTE)) {
+        	time = truncateMinutes(val,  modType, time);
         }
         
-        if(!done) {
-        	time = truncateSeconds(val, field, modType, time);
+        if (date.getTime() != time) {
+            date.setTime(time);
+            val.setTime(date);
         }
-        
-        if (field == Calendar.MINUTE) {
-            done = true;
-        }
-
-       if(!done) {
-    	   time = truncateMinutes(val, field, modType, time);
-       }
-       
-       return time;         	
+       // return time;
+  	  
+  	          	
     }
     
-    private static Calendar resetTime(final Calendar val, final Date date, long time) {
-    	  if (date.getTime() != time) {
-              date.setTime(time);
-              val.setTime(date);
-          }
-    	  
-    	  return val;
+    
+   /* private static Calendar resetTime(final Calendar val, final Date date, long time) {
+    	 
+    }*/
+    
+    private static boolean compareFields(final int currentField, final int comparisonField) {
+    	return currentField == comparisonField;
     }
     
-    private static long truncateMinutes(Calendar val, int field, int modType, long time) {
+    private static long truncateMinutes(final Calendar val, final int modType, 
+    		long time) {
+    	long newTime = 0;
     	final int minutes = val.get(Calendar.MINUTE);
         if ((MODIFY_TRUNCATE == modType || minutes < 30)) {
-            time = time - (minutes * 60000L);
+        	newTime = time - (minutes * 60000L);
         }
         
-        return time;
+        return newTime;
 	}
 
-	private static long truncateSeconds(Calendar val, int field, int modType, long time) {
+	private static long truncateSeconds(final Calendar val, final int modType, 
+			long time) {
+		long newTime = 0;
     	final int seconds = val.get(Calendar.SECOND);
         if ((MODIFY_TRUNCATE == modType || seconds < 30)) {
-            time = time - (seconds * 1000L);
+        	newTime = time - (seconds * 1000L);
         }
         
-        return time;
+        return newTime;
 	}
 
-	private static long truncateMilliseconds(final Calendar val, final int field, final int modType, long time) {
-    	// truncate milliseconds
+	private static long truncateMilliseconds(final Calendar val, final int modType
+			, long time) {
+    	
+		long newTime = 0;
         final int millisecs = val.get(Calendar.MILLISECOND);
         if (MODIFY_TRUNCATE == modType || millisecs < 500) {
-            time = time - millisecs;
+            newTime = time - millisecs;
         }
        
-        return time;
+        return newTime;
     }
     //-----------------------------------------------------------------------
     /**
